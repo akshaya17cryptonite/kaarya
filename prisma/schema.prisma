@@ -1,0 +1,406 @@
+// LocConnect Marketplace - Prisma Schema
+// PostgreSQL with PostGIS support via Supabase
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum BookingStatus {
+  REQUESTED
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  ONLINE
+  CASH
+}
+
+enum ProviderVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum KycDocumentType {
+  AADHAAR
+  PAN
+  DRIVING_LICENSE
+  POLICE_VERIFICATION
+}
+
+enum NotificationType {
+  BOOKING
+  PAYMENT
+  SYSTEM
+  PROMOTION
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// -----------------------------------------------------------------------------
+// MODELS
+// -----------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(uuid())
+  authId    String   @unique @map("auth_id") // References Supabase auth.users.id
+  email     String?  @unique
+  phone     String   @unique
+  role      UserRole @default(CUSTOMER)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  profile       Profile?
+  provider      Provider?
+  addresses     Address[]
+  bookings      Booking[]      @relation("CustomerBookings")
+  reviews       Review[]       @relation("CustomerReviews")
+  notifications Notification[]
+  sentMessages     Message[]   @relation("SentMessages")
+  receivedMessages Message[]   @relation("ReceivedMessages")
+
+  @@index([role])
+  @@index([phone])
+  @@index([email])
+  @@map("users")
+}
+
+model Profile {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  name      String
+  avatarUrl String?  @map("avatar_url")
+  bio       String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model Provider {
+  id                 String                     @id @default(uuid())
+  userId             String                     @unique @map("user_id")
+  experienceYears    Int                        @default(1) @map("experience_years")
+  verificationStatus ProviderVerificationStatus @default(PENDING) @map("verification_status")
+  rejectionReason    String?                    @map("rejection_reason")
+  serviceRadiusKm    Float                      @default(15.0) @map("service_radius_km")
+  latitude           Float                      @default(28.5355)
+  longitude          Float                      @default(77.3910)
+  currentAddress     String                     @map("current_address")
+  isAvailable        Boolean                    @default(true) @map("is_available")
+  averageRating      Float                      @default(0.0) @map("average_rating")
+  totalReviews       Int                        @default(0) @map("total_reviews")
+  totalCompletedJobs Int                        @default(0) @map("total_completed_jobs")
+
+  // Payout Details
+  bankAccountNumber  String?                    @map("bank_account_number")
+  bankIfscCode       String?                    @map("bank_ifsc_code")
+  bankAccountName    String?                    @map("bank_account_name")
+  upiId              String?                    @map("upi_id")
+
+  createdAt          DateTime                   @default(now()) @map("created_at")
+  updatedAt          DateTime                   @updatedAt @map("updated_at")
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  services          ProviderService[]
+  availabilitySlots AvailabilitySlot[]
+  bookings          Booking[]          @relation("ProviderBookings")
+  reviews           Review[]           @relation("ProviderReviews")
+  payouts           Payout[]
+  kycDocuments      KycDocument[]
+
+  @@index([verificationStatus])
+  @@index([latitude, longitude])
+  @@index([isAvailable])
+  @@index([averageRating])
+  @@map("providers")
+}
+
+model Category {
+  id           String    @id @default(uuid())
+  name         String
+  slug         String    @unique
+  description  String
+  iconName     String    @map("icon_name")
+  imageUrl     String    @map("image_url")
+  isActive     Boolean   @default(true) @map("is_active")
+  displayOrder Int       @default(0) @map("display_order")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  services     Service[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@map("categories")
+}
+
+model Service {
+  id                       String   @id @default(uuid())
+  categoryId               String   @map("category_id")
+  name                     String
+  slug                     String   @unique
+  description              String
+  basePrice                Float    @map("base_price")
+  estimatedDurationMinutes Int      @default(60) @map("estimated_duration_minutes")
+  imageUrl                 String?  @map("image_url")
+  isActive                 Boolean  @default(true) @map("is_active")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  category         Category          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  providerServices ProviderService[]
+  bookings         Booking[]
+
+  @@index([categoryId])
+  @@index([slug])
+  @@index([isActive])
+  @@map("services")
+}
+
+model ProviderService {
+  id          String   @id @default(uuid())
+  providerId  String   @map("provider_id")
+  serviceId   String   @map("service_id")
+  customPrice Float?   @map("custom_price")
+  isAvailable Boolean  @default(true) @map("is_available")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  service  Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, serviceId])
+  @@index([providerId])
+  @@index([serviceId])
+  @@map("provider_services")
+}
+
+model AvailabilitySlot {
+  id         String   @id @default(uuid())
+  providerId String   @map("provider_id")
+  dayOfWeek  Int      @map("day_of_week") // 0 = Sunday, 1 = Monday ... 6 = Saturday
+  startTime  String   @map("start_time")  // "09:00"
+  endTime    String   @map("end_time")    // "11:00"
+  isBooked   Boolean  @default(false) @map("is_booked")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, dayOfWeek])
+  @@map("availability_slots")
+}
+
+model Address {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  label         String?  // e.g. "Home", "Office"
+  streetAddress String   @map("street_address")
+  landmark      String?
+  city          String   @default("Noida")
+  state         String   @default("Uttar Pradesh")
+  postalCode    String   @map("postal_code")
+  latitude      Float    @default(28.5355)
+  longitude     Float    @default(77.3910)
+  isDefault     Boolean  @default(false) @map("is_default")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@index([userId])
+  @@index([latitude, longitude])
+  @@map("addresses")
+}
+
+model Booking {
+  id                 String        @id @default(uuid())
+  bookingNumber      String        @unique @map("booking_number")
+  customerId         String        @map("customer_id")
+  providerId         String        @map("provider_id")
+  serviceId          String        @map("service_id")
+  addressId          String        @map("address_id")
+  status             BookingStatus @default(REQUESTED)
+  scheduledDate      DateTime      @map("scheduled_date")
+  timeSlot           String        @map("time_slot") // "10:00 AM - 12:00 PM"
+  customerNotes      String?       @map("customer_notes")
+  cancellationReason String?       @map("cancellation_reason")
+  cancelledBy        UserRole?     @map("cancelled_by")
+
+  // Pricing & Marketplace breakdown
+  servicePrice       Float         @map("service_price")
+  platformFee        Float         @map("platform_fee")
+  taxAmount          Float         @map("tax_amount")
+  totalAmount        Float         @map("total_amount")
+
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  customer User     @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: Restrict)
+  provider Provider @relation("ProviderBookings", fields: [providerId], references: [id], onDelete: Restrict)
+  service  Service  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  address  Address  @relation(fields: [addressId], references: [id], onDelete: Restrict)
+
+  payment  Payment?
+  payout   Payout?
+  review   Review?
+  messages Message[]
+
+  @@index([customerId])
+  @@index([providerId])
+  @@index([status])
+  @@index([scheduledDate])
+  @@index([bookingNumber])
+  @@map("bookings")
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  bookingId         String        @unique @map("booking_id")
+  amount            Float
+  currency          String        @default("INR")
+  method            PaymentMethod @default(ONLINE)
+  status            PaymentStatus @default(PENDING)
+  razorpayOrderId   String?       @map("razorpay_order_id")
+  razorpayPaymentId String?       @map("razorpay_payment_id")
+  razorpaySignature String?       @map("razorpay_signature")
+  paidAt            DateTime?     @map("paid_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([razorpayOrderId])
+  @@map("payments")
+}
+
+model Payout {
+  id              String       @id @default(uuid())
+  providerId      String       @map("provider_id")
+  bookingId       String       @unique @map("booking_id")
+  grossAmount     Float        @map("gross_amount")
+  platformFee     Float        @map("platform_fee")
+  netPayout       Float        @map("net_payout")
+  status          PayoutStatus @default(PENDING)
+  payoutReference String?      @map("payout_reference")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  booking  Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([status])
+  @@map("payouts")
+}
+
+model Review {
+  id            String   @id @default(uuid())
+  bookingId     String   @unique @map("booking_id")
+  customerId    String   @map("customer_id")
+  providerId    String   @map("provider_id")
+  rating        Int      @default(5) // 1 to 5
+  comment       String?
+  providerReply String?  @map("provider_reply")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  booking  Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customer User     @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: Restrict)
+  provider Provider @relation("ProviderReviews", fields: [providerId], references: [id], onDelete: Restrict)
+
+  @@index([providerId])
+  @@index([customerId])
+  @@index([rating])
+  @@map("reviews")
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  bookingId  String   @map("booking_id")
+  senderId   String   @map("sender_id")
+  receiverId String   @map("receiver_id")
+  content    String
+  isRead     Boolean  @default(false) @map("is_read")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  booking  Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  sender   User    @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User    @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@index([senderId, receiverId])
+  @@map("messages")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  title     String
+  message   String
+  type      NotificationType @default(BOOKING)
+  link      String?
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+model KycDocument {
+  id                 String                     @id @default(uuid())
+  providerId         String                     @map("provider_id")
+  documentType       KycDocumentType            @map("document_type")
+  documentNumber     String                     @map("document_number")
+  fileUrl            String                     @map("file_url")
+  verificationStatus ProviderVerificationStatus @default(PENDING) @map("verification_status")
+  notes              String?
+  createdAt          DateTime                   @default(now()) @map("created_at")
+  updatedAt          DateTime                   @updatedAt @map("updated_at")
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([verificationStatus])
+  @@map("kyc_documents")
+}
