@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  # Local PostgreSQL with PostGIS extension for spatial queries
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: loc_connect_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: loc_user
+      POSTGRES_PASSWORD: loc_password
+      POSTGRES_DB: loc_connect_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loc_user -d loc_connect_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Local Redis for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: loc_connect_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:

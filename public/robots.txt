@@ -1,0 +1,7 @@
+# Allow all search engines
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+
+Sitemap: https://locconnect.in/sitemap.xml
