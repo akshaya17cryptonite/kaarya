@@ -1,11 +1,16 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getBookingById } from "@/modules/bookings/service";
+import { getSession } from "@/modules/auth/service";
+import { getReviewForBooking } from "@/modules/reviews/service";
+import { getBookingMessages } from "@/modules/chat/service";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { cancelBookingAction, confirmOnlinePaymentAction } from "@/modules/bookings/actions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BookingReviewCard } from "@/components/reviews/booking-review-card";
+import { BookingChat } from "@/components/chat/booking-chat";
 import {
   CheckCircle2,
   Clock,
@@ -26,10 +31,19 @@ interface BookingStatusPageProps {
 }
 
 export default async function BookingStatusPage({ params }: BookingStatusPageProps) {
-  const booking = await getBookingById(params.id);
+  const [booking, session] = await Promise.all([
+    getBookingById(params.id),
+    getSession(),
+  ]);
+
   if (!booking) {
     notFound();
   }
+
+  const [review, messages] = await Promise.all([
+    getReviewForBooking(params.id),
+    getBookingMessages(params.id, session?.id || "anonymous"),
+  ]);
 
   // Determine stage progression
   const steps = [
@@ -188,10 +202,12 @@ export default async function BookingStatusPage({ params }: BookingStatusPagePro
                       <span className="hidden sm:inline">Call Partner</span>
                     </Button>
                   </a>
-                  <Button variant="default" size="sm" className="h-9 gap-1.5 text-xs">
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Chat</span>
-                  </Button>
+                  <a href="#chat-section">
+                    <Button variant="default" size="sm" className="h-9 gap-1.5 text-xs">
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>Chat</span>
+                    </Button>
+                  </a>
                 </div>
               </div>
 
@@ -221,6 +237,26 @@ export default async function BookingStatusPage({ params }: BookingStatusPagePro
                 </div>
               </div>
             </Card>
+
+            {/* Customer Review & Rating Section */}
+            {booking.status === "COMPLETED" && (
+              <BookingReviewCard
+                bookingId={booking.id}
+                providerName={booking.provider.user.profile?.name ?? "Service Partner"}
+                existingReview={review}
+                isCompleted={true}
+              />
+            )}
+
+            {/* In-App Direct Chat Section */}
+            <div id="chat-section">
+              <BookingChat
+                bookingId={booking.id}
+                partnerName={booking.provider.user.profile?.name ?? "Service Partner"}
+                initialMessages={messages}
+                currentUserId={session?.id || "anonymous"}
+              />
+            </div>
 
             {/* Cancel Action */}
             {!isCancelled && booking.status !== "COMPLETED" && (

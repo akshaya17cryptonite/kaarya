@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { siteConfig } from "@/config/site";
 import { getSession } from "@/modules/auth/service";
+import { getUserNotifications } from "@/modules/notifications/service";
+import { NotificationsPopover } from "@/components/notifications/notifications-popover";
 import { signOutAction, loginWithMockAccountAction } from "@/modules/auth/actions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +20,9 @@ import {
 
 export async function Navbar() {
   const session = await getSession();
+  const { notifications, unreadCount } = session
+    ? await getUserNotifications(session.id)
+    : { notifications: [], unreadCount: 0 };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -147,6 +152,12 @@ export async function Navbar() {
                   </Button>
                 </Link>
               )}
+
+              {/* Notifications Popover */}
+              <NotificationsPopover
+                initialNotifications={notifications}
+                initialUnreadCount={unreadCount}
+              />
 
               {/* User Pill */}
               <div className="hidden lg:flex flex-col text-right">
