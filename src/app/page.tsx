@@ -6,11 +6,11 @@ import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { HomeSearch } from "@/components/customer/home-search";
 import {
   Wrench,
   Zap,
   Sparkles,
-  Search,
   MapPin,
   Star,
   ShieldCheck,
@@ -215,20 +215,7 @@ export default async function HomePage() {
           </p>
 
           {/* Search Bar */}
-          <div className="max-w-2xl mx-auto pt-4">
-            <div className="flex flex-col sm:flex-row items-center gap-2 p-2 bg-card border rounded-2xl shadow-lg">
-              <div className="flex items-center gap-2 px-3 flex-1 w-full text-left text-sm text-muted-foreground">
-                <Search className="w-5 h-5 text-muted-foreground" />
-                <span className="truncate">Search tap repair, switchboard fix, deep cleaning...</span>
-              </div>
-              <Link href="/services/plumber/noida" className="w-full sm:w-auto">
-                <Button className="w-full sm:w-auto gap-2 px-6">
-                  <span>Explore Services</span>
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-            </div>
-          </div>
+          <HomeSearch />
 
           {/* Quick Category Badges */}
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">

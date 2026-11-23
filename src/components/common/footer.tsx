@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { siteConfig } from "@/config/site";
 import { ShieldCheck, CheckCircle2, Award, Clock } from "lucide-react";
+import { LegalModalButton } from "./legal-modal";
 
 export function Footer() {
   return (
@@ -114,10 +115,10 @@ export function Footer() {
         <div>
           <h4 className="font-semibold text-sm mb-3">Legal & Security</h4>
           <ul className="text-xs space-y-2 text-muted-foreground">
-            <li><span>Privacy Policy</span></li>
-            <li><span>Terms of Service</span></li>
-            <li><span>Razorpay Escrow & Refund Policy</span></li>
-            <li><span>COVID-19 & Sanitization Protocol</span></li>
+            <li><LegalModalButton type="privacy" label="Privacy Policy" /></li>
+            <li><LegalModalButton type="terms" label="Terms of Service" /></li>
+            <li><LegalModalButton type="refund" label="Razorpay Escrow & Refund Policy" /></li>
+            <li><LegalModalButton type="safety" label="Safety & Sanitization Protocol" /></li>
           </ul>
         </div>
       </div>

@@ -4,10 +4,13 @@ import { type Prisma } from "@prisma/client";
 import { getSession } from "@/modules/auth/service";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { getUserAddresses } from "@/modules/users/service";
+import { AddAddressButton, AddressActions } from "@/components/customer/address-dialog";
+import { ProfileEditorDialog } from "@/components/customer/profile-editor-dialog";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Calendar, Clock, Wrench } from "lucide-react";
+import { MapPin, Calendar, Clock, Wrench, MessageSquare, ArrowRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +71,10 @@ export default async function CustomerAccountPage() {
   }
 
   const bookings = customer?.bookings || [];
-  const addresses = customer?.addresses || [];
+  const addresses =
+    customer?.addresses && customer.addresses.length > 0
+      ? customer.addresses
+      : await getUserAddresses(session.id);
 
   return (
     <div className="container py-8 space-y-8">
@@ -88,12 +94,19 @@ export default async function CustomerAccountPage() {
           </div>
         </div>
 
-        <Link href="/">
-          <Button className="gap-2">
-            <Wrench className="w-4 h-4" />
-            <span>Book a New Service</span>
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <ProfileEditorDialog
+            initialName={session.name}
+            initialEmail={session.email}
+            phone={session.phone}
+          />
+          <Link href="/">
+            <Button className="gap-2">
+              <Wrench className="w-4 h-4" />
+              <span>Book a New Service</span>
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -196,6 +209,19 @@ export default async function CustomerAccountPage() {
                         )}
                       </div>
                     </CardContent>
+
+                    <div className="px-5 py-3 border-t bg-muted/20 flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">
+                        Service updates & partner communication:
+                      </span>
+                      <Link href={`/bookings/${booking.id}`}>
+                        <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
+                          <MessageSquare className="w-3.5 h-3.5 text-primary" />
+                          <span>Track & Chat</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </Button>
+                      </Link>
+                    </div>
                   </Card>
                 );
               })}
@@ -207,29 +233,37 @@ export default async function CustomerAccountPage() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-primary" />
-                <span>Saved Addresses</span>
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-primary" />
+                  <span>Saved Addresses</span>
+                </CardTitle>
+                <AddAddressButton />
+              </div>
               <CardDescription>
                 Service locations in Noida for rapid booking.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {addresses.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No saved addresses yet.</p>
+                <div className="text-center py-6 border border-dashed rounded-lg space-y-2">
+                  <MapPin className="w-6 h-6 text-muted-foreground mx-auto opacity-50" />
+                  <p className="text-xs text-muted-foreground">No saved addresses yet.</p>
+                  <AddAddressButton />
+                </div>
               ) : (
                 addresses.map((addr) => (
-                  <div key={addr.id} className="border p-3 rounded-lg text-xs space-y-1 bg-muted/20">
+                  <div key={addr.id} className="border p-3 rounded-lg text-xs space-y-2 bg-muted/20">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-foreground">{addr.label || "Address"}</span>
                       {addr.isDefault && (
                         <Badge variant="secondary" className="text-[10px]">Default</Badge>
                       )}
                     </div>
-                    <p className="text-muted-foreground">{addr.streetAddress}</p>
-                    {addr.landmark && <p className="text-muted-foreground">Near {addr.landmark}</p>}
-                    <p className="font-medium text-foreground">{addr.city}, {addr.state} - {addr.postalCode}</p>
+                    <p className="text-muted-foreground leading-relaxed">{addr.streetAddress}</p>
+                    {addr.landmark && <p className="text-muted-foreground text-[11px]">Near {addr.landmark}</p>}
+                    <p className="font-medium text-foreground text-[11px]">{addr.city}, {addr.state} - {addr.postalCode}</p>
+                    <AddressActions addressId={addr.id} isDefault={addr.isDefault} />
                   </div>
                 ))
               )}
