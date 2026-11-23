@@ -1053,6 +1053,7 @@ export async function getFilteredProviders(params: {
   longitude?: number;
   radiusKm?: number;
   minRating?: number;
+  sortBy?: "distance" | "rating" | "experience";
 }): Promise<NearbyProviderResult[]> {
   const {
     categorySlug,
@@ -1060,7 +1061,16 @@ export async function getFilteredProviders(params: {
     longitude = siteConfig.defaultCity.longitude,
     radiusKm = 25,
     minRating = 0,
+    sortBy = "distance",
   } = params;
+
+  const applySort = (list: NearbyProviderResult[]) => {
+    return [...list].sort((a, b) => {
+      if (sortBy === "rating") return b.averageRating - a.averageRating;
+      if (sortBy === "experience") return b.experienceYears - a.experienceYears;
+      return a.distanceKm - b.distanceKm;
+    });
+  };
 
   try {
     const nearby = await findNearbyProviders({
@@ -1071,7 +1081,8 @@ export async function getFilteredProviders(params: {
     });
 
     if (nearby.length > 0) {
-      return nearby.filter((p) => p.averageRating >= minRating);
+      const filtered = nearby.filter((p) => p.averageRating >= minRating);
+      return applySort(filtered);
     }
   } catch (error) {
     console.warn("Error finding nearby providers:", (error as Error).message);
@@ -1133,8 +1144,9 @@ export async function getFilteredProviders(params: {
     },
   ];
 
-  return fallbackList
-    .filter((p) => p.distanceKm <= radiusKm && p.averageRating >= minRating);
+  return applySort(
+    fallbackList.filter((p) => p.distanceKm <= radiusKm && p.averageRating >= minRating)
+  );
 }
 
 /**

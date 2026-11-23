@@ -7,6 +7,10 @@ import {
   sendOtp,
   verifyOtpAndAuthenticate,
   destroySession,
+  registerWithPassword,
+  loginWithPassword,
+  requestPasswordReset,
+  resetPasswordWithToken,
   AUTH_COOKIE_NAME,
   SessionUser,
 } from "./service";
@@ -129,4 +133,115 @@ export async function signOutAction() {
   await destroySession();
   revalidatePath("/", "layout");
   redirect("/");
+}
+
+/**
+ * Server Action: Registers user with password
+ */
+export async function registerWithPasswordAction(formData: FormData) {
+  const name = (formData.get("name") as string)?.trim();
+  const phone = (formData.get("phone") as string)?.trim();
+  const email = (formData.get("email") as string)?.trim();
+  const password = formData.get("password") as string;
+  const role = (formData.get("role") as UserRole) || "CUSTOMER";
+  const redirectTo = (formData.get("redirectTo") as string) || "";
+
+  const result = await registerWithPassword({
+    name,
+    phone,
+    email: email || undefined,
+    password,
+    role,
+  });
+
+  if (!result.success || !result.user) {
+    const errorMsg = result.error || "Registration failed.";
+    redirect(
+      `/register?role=${role}&error=${encodeURIComponent(errorMsg)}&name=${encodeURIComponent(name || "")}&phone=${encodeURIComponent(phone || "")}&email=${encodeURIComponent(email || "")}`
+    );
+  }
+
+  revalidatePath("/", "layout");
+
+  if (redirectTo && redirectTo.startsWith("/")) {
+    redirect(redirectTo);
+  } else if (result.user.role === "PROVIDER") {
+    redirect("/provider");
+  } else if (result.user.role === "ADMIN") {
+    redirect("/admin");
+  } else {
+    redirect("/account");
+  }
+}
+
+/**
+ * Server Action: Logs in user with identifier and password
+ */
+export async function loginWithPasswordAction(formData: FormData) {
+  const identifier = (formData.get("identifier") as string)?.trim();
+  const password = formData.get("password") as string;
+  const redirectTo = (formData.get("redirectTo") as string) || "";
+  const role = (formData.get("role") as string) || "CUSTOMER";
+
+  const result = await loginWithPassword({
+    identifier,
+    password,
+  });
+
+  if (!result.success || !result.user) {
+    const errorMsg = result.error || "Login failed.";
+    redirect(
+      `/login?role=${role}&error=${encodeURIComponent(errorMsg)}&identifier=${encodeURIComponent(identifier || "")}`
+    );
+  }
+
+  revalidatePath("/", "layout");
+
+  if (redirectTo && redirectTo.startsWith("/")) {
+    redirect(redirectTo);
+  } else if (result.user.role === "PROVIDER") {
+    redirect("/provider");
+  } else if (result.user.role === "ADMIN") {
+    redirect("/admin");
+  } else {
+    redirect("/");
+  }
+}
+
+/**
+ * Server Action: Requests password reset link/token
+ */
+export async function forgotPasswordAction(formData: FormData) {
+  const identifier = (formData.get("identifier") as string)?.trim();
+  const result = await requestPasswordReset(identifier);
+
+  redirect(
+    `/forgot-password?message=${encodeURIComponent(result.message)}&token=${encodeURIComponent(result.resetToken || "")}`
+  );
+}
+
+/**
+ * Server Action: Resets password with valid token
+ */
+export async function resetPasswordAction(formData: FormData) {
+  const token = (formData.get("token") as string)?.trim();
+  const newPassword = formData.get("newPassword") as string;
+  const confirmPassword = formData.get("confirmPassword") as string;
+
+  if (newPassword !== confirmPassword) {
+    redirect(
+      `/reset-password?token=${encodeURIComponent(token)}&error=${encodeURIComponent("Passwords do not match.")}`
+    );
+  }
+
+  const result = await resetPasswordWithToken(token, newPassword);
+  if (!result.success) {
+    redirect(
+      `/reset-password?token=${encodeURIComponent(token)}&error=${encodeURIComponent(result.error || "Password reset failed.")}`
+    );
+  }
+
+  redirect(
+    `/login?message=${encodeURIComponent("Password reset successfully. You can now log in with your new password.")}`
+  );
 }

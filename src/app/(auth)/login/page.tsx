@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { siteConfig } from "@/config/site";
-import { loginWithMockAccountAction } from "@/modules/auth/actions";
+import { loginWithMockAccountAction, loginWithPasswordAction } from "@/modules/auth/actions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ShieldCheck, ArrowRight, UserCheck, ShieldAlert } from "lucide-react";
+import { ShieldCheck, ArrowRight, UserCheck, ShieldAlert, CheckCircle2, Lock, Mail, Smartphone } from "lucide-react";
 
 interface LoginPageProps {
   searchParams: {
@@ -14,6 +14,8 @@ interface LoginPageProps {
     redirectTo?: string;
     phone?: string;
     error?: string;
+    message?: string;
+    identifier?: string;
   };
 }
 
@@ -33,9 +35,16 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
             <span>{siteConfig.name}</span>
           </Link>
           <p className="text-sm text-muted-foreground">
-            Fast, secure login with mobile OTP verification
+            Fast, secure access to your account in Noida
           </p>
         </div>
+
+        {searchParams.message && (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs p-3 rounded-lg flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{searchParams.message}</span>
+          </div>
+        )}
 
         {searchParams.error && (
           <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm p-3 rounded-lg flex items-center gap-2">
@@ -58,43 +67,116 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
           <TabsContent value="CUSTOMER">
             <Card>
               <CardHeader>
-                <CardTitle className="text-xl">Welcome to {siteConfig.name}</CardTitle>
+                <CardTitle className="text-xl">Customer Portal</CardTitle>
                 <CardDescription>
-                  Enter your mobile number to book verified plumbers, electricians, and cleaners in Noida.
+                  Sign in with your password or mobile OTP to track bookings.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <form action="/verify-otp" method="GET" className="space-y-4">
-                  <input type="hidden" name="role" value="CUSTOMER" />
-                  {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
+              <CardContent className="space-y-4">
+                <Tabs defaultValue="password" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50">
+                    <TabsTrigger value="password" className="text-xs gap-1.5">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Password</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="otp" className="text-xs gap-1.5">
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>Phone OTP</span>
+                    </TabsTrigger>
+                  </TabsList>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="phone-customer">Mobile Number</Label>
-                    <div className="flex">
-                      <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm font-medium">
-                        +91
-                      </span>
-                      <Input
-                        id="phone-customer"
-                        name="phone"
-                        type="tel"
-                        placeholder="9811122233"
-                        required
-                        pattern="[0-9]{10}"
-                        defaultValue={searchParams.phone || "9811122233"}
-                        className="rounded-l-none"
-                      />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      We will send a 6-digit OTP code to verify your phone.
-                    </p>
-                  </div>
+                  {/* Password Login */}
+                  <TabsContent value="password">
+                    <form action={loginWithPasswordAction} className="space-y-4">
+                      <input type="hidden" name="role" value="CUSTOMER" />
+                      {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
 
-                  <Button type="submit" className="w-full gap-2">
-                    <span>Continue with OTP</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
-                </form>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="cust-ident" className="text-xs">
+                          Email or Mobile Number
+                        </Label>
+                        <div className="relative">
+                          <Mail className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
+                          <Input
+                            id="cust-ident"
+                            name="identifier"
+                            required
+                            placeholder="name@example.com or 9811122233"
+                            defaultValue={searchParams.identifier || searchParams.phone || ""}
+                            className="pl-9 text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="cust-pwd" className="text-xs">Password</Label>
+                          <Link href="/forgot-password" className="text-[11px] text-primary hover:underline">
+                            Forgot Password?
+                          </Link>
+                        </div>
+                        <div className="relative">
+                          <Lock className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
+                          <Input
+                            id="cust-pwd"
+                            name="password"
+                            type="password"
+                            required
+                            placeholder="••••••••"
+                            className="pl-9 text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <Button type="submit" className="w-full gap-2">
+                        <span>Sign In</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </form>
+                  </TabsContent>
+
+                  {/* OTP Login */}
+                  <TabsContent value="otp">
+                    <form action="/verify-otp" method="GET" className="space-y-4">
+                      <input type="hidden" name="role" value="CUSTOMER" />
+                      {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
+
+                      <div className="space-y-2">
+                        <Label htmlFor="phone-customer" className="text-xs">Mobile Number</Label>
+                        <div className="flex">
+                          <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm font-medium">
+                            +91
+                          </span>
+                          <Input
+                            id="phone-customer"
+                            name="phone"
+                            type="tel"
+                            placeholder="9811122233"
+                            required
+                            pattern="[0-9]{10}"
+                            defaultValue={searchParams.phone || "9811122233"}
+                            className="rounded-l-none text-sm"
+                          />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          We will send a 6-digit OTP code to verify your phone.
+                        </p>
+                      </div>
+
+                      <Button type="submit" variant="secondary" className="w-full gap-2">
+                        <span>Continue with OTP</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </form>
+                  </TabsContent>
+                </Tabs>
+
+                <div className="pt-2 text-center text-xs text-muted-foreground border-t">
+                  Don&apos;t have an account?{" "}
+                  <Link href="/register?role=CUSTOMER" className="text-primary font-semibold hover:underline">
+                    Register here
+                  </Link>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -108,38 +190,111 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
                   Access your job requests, manage scheduled slots, and track weekly earnings.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <form action="/verify-otp" method="GET" className="space-y-4">
-                  <input type="hidden" name="role" value="PROVIDER" />
-                  {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
+              <CardContent className="space-y-4">
+                <Tabs defaultValue="password" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50">
+                    <TabsTrigger value="password" className="text-xs gap-1.5">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Password</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="otp" className="text-xs gap-1.5">
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>Phone OTP</span>
+                    </TabsTrigger>
+                  </TabsList>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="phone-provider">Partner Mobile Number</Label>
-                    <div className="flex">
-                      <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm font-medium">
-                        +91
-                      </span>
-                      <Input
-                        id="phone-provider"
-                        name="phone"
-                        type="tel"
-                        placeholder="9810111222"
-                        required
-                        pattern="[0-9]{10}"
-                        defaultValue={searchParams.phone || "9810111222"}
-                        className="rounded-l-none"
-                      />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Use the registered mobile number associated with your KYC document.
-                    </p>
-                  </div>
+                  {/* Provider Password */}
+                  <TabsContent value="password">
+                    <form action={loginWithPasswordAction} className="space-y-4">
+                      <input type="hidden" name="role" value="PROVIDER" />
+                      {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
 
-                  <Button type="submit" variant="brand" className="w-full gap-2">
-                    <span>Continue as Partner</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
-                </form>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="prov-ident" className="text-xs">
+                          Partner Phone or Email
+                        </Label>
+                        <div className="relative">
+                          <Mail className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
+                          <Input
+                            id="prov-ident"
+                            name="identifier"
+                            required
+                            placeholder="partner@example.com or 9810111222"
+                            defaultValue={searchParams.identifier || searchParams.phone || ""}
+                            className="pl-9 text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="prov-pwd" className="text-xs">Password</Label>
+                          <Link href="/forgot-password" className="text-[11px] text-primary hover:underline">
+                            Forgot Password?
+                          </Link>
+                        </div>
+                        <div className="relative">
+                          <Lock className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
+                          <Input
+                            id="prov-pwd"
+                            name="password"
+                            type="password"
+                            required
+                            placeholder="••••••••"
+                            className="pl-9 text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <Button type="submit" variant="brand" className="w-full gap-2">
+                        <span>Partner Sign In</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </form>
+                  </TabsContent>
+
+                  {/* Provider OTP */}
+                  <TabsContent value="otp">
+                    <form action="/verify-otp" method="GET" className="space-y-4">
+                      <input type="hidden" name="role" value="PROVIDER" />
+                      {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
+
+                      <div className="space-y-2">
+                        <Label htmlFor="phone-provider" className="text-xs">Partner Mobile Number</Label>
+                        <div className="flex">
+                          <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm font-medium">
+                            +91
+                          </span>
+                          <Input
+                            id="phone-provider"
+                            name="phone"
+                            type="tel"
+                            placeholder="9810111222"
+                            required
+                            pattern="[0-9]{10}"
+                            defaultValue={searchParams.phone || "9810111222"}
+                            className="rounded-l-none text-sm"
+                          />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Use the registered mobile number associated with your KYC document.
+                        </p>
+                      </div>
+
+                      <Button type="submit" variant="secondary" className="w-full gap-2">
+                        <span>Continue with OTP</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </form>
+                  </TabsContent>
+                </Tabs>
+
+                <div className="pt-2 text-center text-xs text-muted-foreground border-t">
+                  New service partner?{" "}
+                  <Link href="/register?role=PROVIDER" className="text-primary font-semibold hover:underline">
+                    Register as Partner
+                  </Link>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
