@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { prisma } from "@/lib/prisma";
+import { prisma, isMockMode } from "@/lib/prisma";
 import { AUTH_COOKIE_NAME, type SessionUser } from "@/modules/auth/constants";
 
 export interface AddressItem {
@@ -49,6 +49,10 @@ const FALLBACK_ADDRESSES: AddressItem[] = [
 ];
 
 export async function getUserAddresses(userId: string): Promise<AddressItem[]> {
+  if (isMockMode) {
+    return FALLBACK_ADDRESSES;
+  }
+
   try {
     const addresses = await prisma.address.findMany({
       where: { userId },
@@ -78,6 +82,24 @@ export async function createUserAddress(
     longitude?: number;
   }
 ): Promise<{ success: boolean; error?: string; address?: AddressItem }> {
+  if (isMockMode) {
+    const mockCreated: AddressItem = {
+      id: `addr_${Date.now()}`,
+      userId,
+      label: data.label || "Address",
+      streetAddress: data.streetAddress,
+      landmark: data.landmark || null,
+      city: data.city || "Noida",
+      state: data.state || "Uttar Pradesh",
+      postalCode: data.postalCode || "201301",
+      isDefault: Boolean(data.isDefault),
+      latitude: data.latitude || 28.5355,
+      longitude: data.longitude || 77.391,
+      createdAt: new Date(),
+    };
+    return { success: true, address: mockCreated };
+  }
+
   try {
     if (data.isDefault) {
       await prisma.address.updateMany({
@@ -126,6 +148,10 @@ export async function deleteUserAddress(
   userId: string,
   addressId: string
 ): Promise<{ success: boolean; error?: string }> {
+  if (isMockMode) {
+    return { success: true };
+  }
+
   try {
     await prisma.address.deleteMany({
       where: {
@@ -144,6 +170,10 @@ export async function setDefaultUserAddress(
   userId: string,
   addressId: string
 ): Promise<{ success: boolean; error?: string }> {
+  if (isMockMode) {
+    return { success: true };
+  }
+
   try {
     await prisma.$transaction([
       prisma.address.updateMany({
@@ -166,6 +196,47 @@ export async function updateCustomerProfile(
   userId: string,
   data: { name: string; email?: string }
 ): Promise<{ success: boolean; error?: string; user?: SessionUser }> {
+  if (isMockMode) {
+    let sessionUser: SessionUser = {
+      id: userId,
+      authId: "mock-auth",
+      phone: "+919811122233",
+      email: data.email || "rohit.mehta@example.com",
+      role: "CUSTOMER",
+      name: data.name.trim(),
+      avatarUrl: null,
+    };
+
+    try {
+      const cookieStore = cookies();
+      const existing = cookieStore.get(AUTH_COOKIE_NAME);
+      if (existing?.value) {
+        try {
+          const parsed = JSON.parse(existing.value);
+          sessionUser = {
+            ...parsed,
+            name: data.name.trim(),
+            email: data.email ? data.email.trim() : parsed.email,
+          };
+        } catch {
+          // use default sessionUser
+        }
+      }
+
+      cookieStore.set(AUTH_COOKIE_NAME, JSON.stringify(sessionUser), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+    } catch {
+      // outside request context
+    }
+
+    return { success: true, user: sessionUser };
+  }
+
   try {
     const updated = await prisma.user.update({
       where: { id: userId },

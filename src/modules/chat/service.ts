@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma, isMockMode } from "@/lib/prisma";
 import { NotificationType } from "@prisma/client";
 
 export interface ChatMessageItem {
@@ -20,6 +20,35 @@ export async function getBookingMessages(
   bookingId: string,
   currentUserId: string
 ): Promise<ChatMessageItem[]> {
+  const fallbackMessages: ChatMessageItem[] = [
+    {
+      id: "msg_fallback_1",
+      bookingId,
+      senderId: "u_p1",
+      receiverId: currentUserId,
+      content: "Namaste! I have received your booking and will reach your address at the scheduled time with necessary tools.",
+      isRead: true,
+      createdAt: new Date(Date.now() - 3600 * 1000).toISOString(),
+      senderName: "Service Partner",
+      isMe: false,
+    },
+    {
+      id: "msg_fallback_2",
+      bookingId,
+      senderId: currentUserId,
+      receiverId: "u_p1",
+      content: "Thank you! Please call when you arrive at the apartment security gate.",
+      isRead: true,
+      createdAt: new Date(Date.now() - 3000 * 1000).toISOString(),
+      senderName: "You",
+      isMe: true,
+    },
+  ];
+
+  if (isMockMode) {
+    return fallbackMessages;
+  }
+
   try {
     const messages = await prisma.message.findMany({
       where: { bookingId },
@@ -60,31 +89,7 @@ export async function getBookingMessages(
     console.warn("DB getBookingMessages failed:", (err as Error).message);
   }
 
-  // Fallback initial conversation for offline/demo mode
-  return [
-    {
-      id: "msg_fallback_1",
-      bookingId,
-      senderId: "u_p1",
-      receiverId: currentUserId,
-      content: "Namaste! I have received your booking and will reach your address at the scheduled time with necessary tools.",
-      isRead: true,
-      createdAt: new Date(Date.now() - 3600 * 1000).toISOString(),
-      senderName: "Service Partner",
-      isMe: false,
-    },
-    {
-      id: "msg_fallback_2",
-      bookingId,
-      senderId: currentUserId,
-      receiverId: "u_p1",
-      content: "Thank you! Please call when you arrive at the apartment security gate.",
-      isRead: true,
-      createdAt: new Date(Date.now() - 3000 * 1000).toISOString(),
-      senderName: "You",
-      isMe: true,
-    },
-  ];
+  return fallbackMessages;
 }
 
 /**
@@ -99,6 +104,23 @@ export async function sendBookingMessage(params: {
 
   if (!content || content.trim().length === 0) {
     return { success: false, error: "Message cannot be empty." };
+  }
+
+  if (isMockMode) {
+    return {
+      success: true,
+      message: {
+        id: `msg_${Date.now()}`,
+        bookingId,
+        senderId,
+        receiverId: "u_receiver",
+        content: content.trim(),
+        isRead: false,
+        createdAt: new Date().toISOString(),
+        senderName: "You",
+        isMe: true,
+      },
+    };
   }
 
   try {

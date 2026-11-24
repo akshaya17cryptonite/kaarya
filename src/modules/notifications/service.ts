@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma, isMockMode } from "@/lib/prisma";
 import { NotificationType } from "@prisma/client";
 
 export * from "@/types";
@@ -65,20 +65,22 @@ export async function dispatchMultiChannelNotification(
   let notificationId = `notif_${Date.now()}`;
 
   // 1. Create In-App Notification record
-  try {
-    const notif = await prisma.notification.create({
-      data: {
-        userId,
-        title,
-        message,
-        type,
-        link,
-        isRead: false,
-      },
-    });
-    notificationId = notif.id;
-  } catch (err) {
-    console.warn("DB in-app notification creation fallback:", (err as Error).message);
+  if (!isMockMode) {
+    try {
+      const notif = await prisma.notification.create({
+        data: {
+          userId,
+          title,
+          message,
+          type,
+          link,
+          isRead: false,
+        },
+      });
+      notificationId = notif.id;
+    } catch (err) {
+      console.warn("DB in-app notification creation fallback:", (err as Error).message);
+    }
   }
 
   // 2. Dispatch SMS driver if phone available
@@ -101,32 +103,6 @@ export async function getUserNotifications(userId: string): Promise<{
   notifications: UserNotificationItem[];
   unreadCount: number;
 }> {
-  try {
-    const list = await prisma.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      take: 25,
-    });
-
-    if (list.length > 0) {
-      const items: UserNotificationItem[] = list.map((n) => ({
-        id: n.id,
-        userId: n.userId,
-        title: n.title,
-        message: n.message,
-        type: n.type,
-        link: n.link,
-        isRead: n.isRead,
-        createdAt: n.createdAt.toISOString(),
-      }));
-
-      const unreadCount = items.filter((n) => !n.isRead).length;
-      return { notifications: items, unreadCount };
-    }
-  } catch (err) {
-    console.warn("DB getUserNotifications failed, using fallback:", (err as Error).message);
-  }
-
   // Fallback demo notifications for offline / initial states
   const fallbackList: UserNotificationItem[] = [
     {
@@ -161,6 +137,39 @@ export async function getUserNotifications(userId: string): Promise<{
     },
   ];
 
+  if (isMockMode) {
+    return {
+      notifications: fallbackList,
+      unreadCount: fallbackList.filter((n) => !n.isRead).length,
+    };
+  }
+
+  try {
+    const list = await prisma.notification.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+    });
+
+    if (list.length > 0) {
+      const items: UserNotificationItem[] = list.map((n) => ({
+        id: n.id,
+        userId: n.userId,
+        title: n.title,
+        message: n.message,
+        type: n.type,
+        link: n.link,
+        isRead: n.isRead,
+        createdAt: n.createdAt.toISOString(),
+      }));
+
+      const unreadCount = items.filter((n) => !n.isRead).length;
+      return { notifications: items, unreadCount };
+    }
+  } catch (err) {
+    console.warn("DB getUserNotifications failed, using fallback:", (err as Error).message);
+  }
+
   return {
     notifications: fallbackList,
     unreadCount: fallbackList.filter((n) => !n.isRead).length,
@@ -174,6 +183,10 @@ export async function markNotificationAsRead(
   notificationId: string,
   userId: string
 ): Promise<{ success: boolean }> {
+  if (isMockMode) {
+    return { success: true };
+  }
+
   try {
     await prisma.notification.updateMany({
       where: {
@@ -195,6 +208,9 @@ export async function markNotificationAsRead(
 export async function markAllNotificationsAsRead(
   userId: string
 ): Promise<{ success: boolean }> {
+  if (isMockMode) {
+    return { success: true };
+  }
   try {
     await prisma.notification.updateMany({
       where: { userId },

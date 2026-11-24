@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma, isMockMode } from "@/lib/prisma";
 import { BookingStatus, PaymentMethod, PaymentStatus } from "@prisma/client";
 import { calculateMarketplaceSplit } from "@/modules/payments";
 
@@ -60,6 +60,46 @@ export async function createBooking(input: CreateBookingInput) {
   // 2. Financial calculation
   const split = calculateMarketplaceSplit(servicePrice);
   const bookingNumber = generateBookingNumber();
+
+  if (isMockMode) {
+    const mockBooking = {
+      id: `bk_${Date.now()}`,
+      bookingNumber,
+      customerId,
+      providerId,
+      serviceId,
+      status: BookingStatus.REQUESTED,
+      scheduledDate: new Date(scheduledDate),
+      timeSlot,
+      customerNotes,
+      servicePrice: split.servicePrice,
+      platformFee: split.platformFee,
+      taxAmount: split.taxOnFee,
+      totalAmount: split.totalCustomerPayable,
+      service: {
+        name: "Home Service",
+        basePrice: servicePrice,
+      },
+      provider: {
+        user: {
+          profile: { name: "Ramesh Verma" },
+          phone: "+919810111222",
+        },
+      },
+      address: {
+        streetAddress,
+        city,
+      },
+      payment: {
+        id: `pay_${Date.now()}`,
+        amount: split.totalCustomerPayable,
+        method: paymentMethod,
+        status: PaymentStatus.PENDING,
+      },
+    };
+
+    return { success: true, booking: mockBooking };
+  }
 
   try {
     // 3. Create or reuse address
@@ -173,35 +213,8 @@ export async function createBooking(input: CreateBookingInput) {
  * Retrieve booking details by ID
  */
 export async function getBookingById(bookingId: string) {
-  try {
-    const booking = await prisma.booking.findUnique({
-      where: { id: bookingId },
-      include: {
-        service: {
-          include: { category: true },
-        },
-        provider: {
-          include: {
-            user: { include: { profile: true } },
-          },
-        },
-        customer: {
-          include: { profile: true },
-        },
-        address: true,
-        payment: true,
-        review: true,
-      },
-    });
-
-    if (booking) return booking;
-  } catch (err) {
-    console.warn("DB booking lookup failed:", (err as Error).message);
-  }
-
-  // Fallback booking object for local dev
   const split = calculateMarketplaceSplit(499);
-  return {
+  const fallbackBooking = {
     id: bookingId,
     bookingNumber: "BK-202610-9182",
     customerId: "u_rohit",
@@ -267,12 +280,56 @@ export async function getBookingById(bookingId: string) {
     createdAt: new Date(),
     updatedAt: new Date(),
   };
+
+  if (isMockMode) {
+    return fallbackBooking;
+  }
+
+  try {
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        service: {
+          include: { category: true },
+        },
+        provider: {
+          include: {
+            user: { include: { profile: true } },
+          },
+        },
+        customer: {
+          include: { profile: true },
+        },
+        address: true,
+        payment: true,
+        review: true,
+      },
+    });
+
+    if (booking) return booking;
+  } catch (err) {
+    console.warn("DB booking lookup failed:", (err as Error).message);
+  }
+
+  return fallbackBooking;
 }
 
 /**
  * Cancel a booking
  */
 export async function cancelBooking(bookingId: string, reason: string, cancelledByRole: "CUSTOMER" | "PROVIDER") {
+  if (isMockMode) {
+    return {
+      success: true,
+      booking: {
+        id: bookingId,
+        status: BookingStatus.CANCELLED,
+        cancellationReason: reason,
+        cancelledBy: cancelledByRole,
+      },
+    };
+  }
+
   try {
     const updated = await prisma.booking.update({
       where: { id: bookingId },

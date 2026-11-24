@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma, isMockMode } from "@/lib/prisma";
 import {
   BookingStatus,
   PaymentStatus,
@@ -151,6 +151,39 @@ let currentPlatformSettings: PlatformSettings = {
  * Get Platform Analytics and KPI Dashboard data
  */
 export async function getAdminDashboardStats(): Promise<AdminAnalyticsStats> {
+  const fallbackStats: AdminAnalyticsStats = {
+    totalBookings: 8,
+    totalProviders: 4,
+    verifiedProviders: 3,
+    pendingKycCount: 1,
+    totalCustomers: 5,
+    categoriesCount: 3,
+    servicesCount: 12,
+    grossMerchandiseValue: 5490,
+    platformNetRevenue: 823.5,
+    averageBookingValue: 686,
+    completedBookingsCount: 4,
+    cancelledBookingsCount: 1,
+    disputedBookingsCount: 1,
+    statusBreakdown: {
+      REQUESTED: 1,
+      ACCEPTED: 2,
+      IN_PROGRESS: 1,
+      COMPLETED: 4,
+      CANCELLED: 1,
+      REJECTED: 0,
+    },
+    categoryRevenueBreakdown: [
+      { categoryName: "Plumbing Services", bookingsCount: 4, revenue: 2196 },
+      { categoryName: "Electrical Services", bookingsCount: 2, revenue: 1498 },
+      { categoryName: "Home Cleaning Services", bookingsCount: 2, revenue: 1796 },
+    ],
+  };
+
+  if (isMockMode) {
+    return fallbackStats;
+  }
+
   try {
     const [
       bookingsCount,
@@ -235,35 +268,7 @@ export async function getAdminDashboardStats(): Promise<AdminAnalyticsStats> {
     console.warn("Using fallback admin analytics:", (err as Error).message);
   }
 
-  // Robust fallback analytics for offline/mock environments
-  return {
-    totalBookings: 8,
-    totalProviders: 4,
-    verifiedProviders: 3,
-    pendingKycCount: 1,
-    totalCustomers: 5,
-    categoriesCount: 3,
-    servicesCount: 12,
-    grossMerchandiseValue: 5490,
-    platformNetRevenue: 823.5,
-    averageBookingValue: 686,
-    completedBookingsCount: 4,
-    cancelledBookingsCount: 1,
-    disputedBookingsCount: 1,
-    statusBreakdown: {
-      REQUESTED: 1,
-      ACCEPTED: 2,
-      IN_PROGRESS: 1,
-      COMPLETED: 4,
-      CANCELLED: 1,
-      REJECTED: 0,
-    },
-    categoryRevenueBreakdown: [
-      { categoryName: "Plumbing Services", bookingsCount: 4, revenue: 2196 },
-      { categoryName: "Electrical Services", bookingsCount: 2, revenue: 1498 },
-      { categoryName: "Home Cleaning Services", bookingsCount: 2, revenue: 1796 },
-    ],
-  };
+  return fallbackStats;
 }
 
 /**
@@ -272,65 +277,6 @@ export async function getAdminDashboardStats(): Promise<AdminAnalyticsStats> {
 export async function getAdminProviders(
   statusFilter?: ProviderVerificationStatus
 ): Promise<AdminProviderDetail[]> {
-  try {
-    const providers = await prisma.provider.findMany({
-      where: statusFilter ? { verificationStatus: statusFilter } : undefined,
-      include: {
-        user: { include: { profile: true } },
-        kycDocuments: { orderBy: { createdAt: "desc" } },
-        services: {
-          include: {
-            service: { include: { category: true } },
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    if (providers.length > 0) {
-      return providers.map((p) => ({
-        id: p.id,
-        userId: p.userId,
-        name: p.user.profile?.name ?? "Provider",
-        phone: p.user.phone,
-        email: p.user.email,
-        avatarUrl: p.user.profile?.avatarUrl ?? null,
-        experienceYears: p.experienceYears,
-        verificationStatus: p.verificationStatus,
-        rejectionReason: p.rejectionReason,
-        serviceRadiusKm: p.serviceRadiusKm,
-        currentAddress: p.currentAddress,
-        averageRating: p.averageRating,
-        totalReviews: p.totalReviews,
-        totalCompletedJobs: p.totalCompletedJobs,
-        isAvailable: p.isAvailable,
-        bankAccountName: p.bankAccountName,
-        bankAccountNumber: p.bankAccountNumber,
-        bankIfscCode: p.bankIfscCode,
-        upiId: p.upiId,
-        createdAt: p.createdAt.toISOString(),
-        services: p.services.map((ps) => ({
-          id: ps.service.id,
-          name: ps.service.name,
-          categoryName: ps.service.category.name,
-          customPrice: ps.customPrice,
-          basePrice: ps.service.basePrice,
-        })),
-        kycDocuments: p.kycDocuments.map((doc) => ({
-          id: doc.id,
-          documentType: doc.documentType,
-          documentNumber: doc.documentNumber,
-          fileUrl: doc.fileUrl,
-          verificationStatus: doc.verificationStatus,
-          notes: doc.notes,
-          createdAt: doc.createdAt.toISOString(),
-        })),
-      }));
-    }
-  } catch (err) {
-    console.warn("DB getAdminProviders failed:", (err as Error).message);
-  }
-
   // Fallback providers with KYC documents for offline dev & tests
   const fallbackList: AdminProviderDetail[] = [
     {
@@ -444,6 +390,72 @@ export async function getAdminProviders(
     },
   ];
 
+  if (isMockMode) {
+    if (statusFilter) {
+      return fallbackList.filter((p) => p.verificationStatus === statusFilter);
+    }
+    return fallbackList;
+  }
+
+  try {
+    const providers = await prisma.provider.findMany({
+      where: statusFilter ? { verificationStatus: statusFilter } : undefined,
+      include: {
+        user: { include: { profile: true } },
+        kycDocuments: { orderBy: { createdAt: "desc" } },
+        services: {
+          include: {
+            service: { include: { category: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (providers.length > 0) {
+      return providers.map((p) => ({
+        id: p.id,
+        userId: p.userId,
+        name: p.user.profile?.name ?? "Provider",
+        phone: p.user.phone,
+        email: p.user.email,
+        avatarUrl: p.user.profile?.avatarUrl ?? null,
+        experienceYears: p.experienceYears,
+        verificationStatus: p.verificationStatus,
+        rejectionReason: p.rejectionReason,
+        serviceRadiusKm: p.serviceRadiusKm,
+        currentAddress: p.currentAddress,
+        averageRating: p.averageRating,
+        totalReviews: p.totalReviews,
+        totalCompletedJobs: p.totalCompletedJobs,
+        isAvailable: p.isAvailable,
+        bankAccountName: p.bankAccountName,
+        bankAccountNumber: p.bankAccountNumber,
+        bankIfscCode: p.bankIfscCode,
+        upiId: p.upiId,
+        createdAt: p.createdAt.toISOString(),
+        services: p.services.map((ps) => ({
+          id: ps.service.id,
+          name: ps.service.name,
+          categoryName: ps.service.category.name,
+          customPrice: ps.customPrice,
+          basePrice: ps.service.basePrice,
+        })),
+        kycDocuments: p.kycDocuments.map((doc) => ({
+          id: doc.id,
+          documentType: doc.documentType,
+          documentNumber: doc.documentNumber,
+          fileUrl: doc.fileUrl,
+          verificationStatus: doc.verificationStatus,
+          notes: doc.notes,
+          createdAt: doc.createdAt.toISOString(),
+        })),
+      }));
+    }
+  } catch (err) {
+    console.warn("DB getAdminProviders failed:", (err as Error).message);
+  }
+
   if (statusFilter) {
     return fallbackList.filter((p) => p.verificationStatus === statusFilter);
   }
@@ -460,6 +472,10 @@ export async function verifyProvider(params: {
   rejectionReason?: string;
 }): Promise<{ success: boolean; error?: string }> {
   const { providerId, status, rejectionReason } = params;
+
+  if (isMockMode) {
+    return { success: true };
+  }
 
   try {
     const provider = await prisma.provider.findUnique({
@@ -513,25 +529,7 @@ export async function verifyProvider(params: {
  * Get all categories with services for Admin Catalog management
  */
 export async function getAdminCatalog() {
-  try {
-    const categories = await prisma.category.findMany({
-      include: {
-        services: {
-          orderBy: { basePrice: "asc" },
-        },
-      },
-      orderBy: { displayOrder: "asc" },
-    });
-
-    if (categories.length > 0) {
-      return categories;
-    }
-  } catch (err) {
-    console.warn("DB getAdminCatalog failed:", (err as Error).message);
-  }
-
-  // Fallback catalog from siteConfig
-  return siteConfig.categories.map((c, idx) => ({
+  const fallbackCatalog = siteConfig.categories.map((c, idx) => ({
     id: c.id,
     name: c.name,
     slug: c.slug,
@@ -563,6 +561,29 @@ export async function getAdminCatalog() {
       },
     ],
   }));
+
+  if (isMockMode) {
+    return fallbackCatalog;
+  }
+
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        services: {
+          orderBy: { basePrice: "asc" },
+        },
+      },
+      orderBy: { displayOrder: "asc" },
+    });
+
+    if (categories.length > 0) {
+      return categories;
+    }
+  } catch (err) {
+    console.warn("DB getAdminCatalog failed:", (err as Error).message);
+  }
+
+  return fallbackCatalog;
 }
 
 /**
@@ -574,6 +595,10 @@ export async function updateCategory(params: {
   description?: string;
   isActive?: boolean;
 }): Promise<{ success: boolean; error?: string }> {
+  if (isMockMode) {
+    return { success: true };
+  }
+
   try {
     await prisma.category.update({
       where: { id: params.categoryId },
@@ -602,6 +627,21 @@ export async function createService(params: {
 }): Promise<{ success: boolean; error?: string; service?: unknown }> {
   const { categoryId, name, description, basePrice, estimatedDurationMinutes } = params;
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+  if (isMockMode) {
+    return {
+      success: true,
+      service: {
+        id: `srv_${Date.now()}`,
+        categoryId,
+        name,
+        slug,
+        basePrice,
+        estimatedDurationMinutes,
+        isActive: true,
+      },
+    };
+  }
 
   try {
     const service = await prisma.service.create({
@@ -644,6 +684,9 @@ export async function updateService(params: {
   estimatedDurationMinutes?: number;
   isActive?: boolean;
 }): Promise<{ success: boolean; error?: string }> {
+  if (isMockMode) {
+    return { success: true };
+  }
   try {
     await prisma.service.update({
       where: { id: params.serviceId },
@@ -671,81 +714,8 @@ export async function getAdminBookings(filters?: {
   status?: BookingStatus;
   limit?: number;
 }): Promise<AdminBookingDetail[]> {
-  try {
-    const bookings = await prisma.booking.findMany({
-      where: filters?.status ? { status: filters.status } : undefined,
-      take: filters?.limit || 50,
-      orderBy: { createdAt: "desc" },
-      include: {
-        customer: { include: { profile: true } },
-        provider: {
-          include: {
-            user: { include: { profile: true } },
-          },
-        },
-        service: {
-          include: { category: true },
-        },
-        address: true,
-        payment: true,
-      },
-    });
-
-    if (bookings.length > 0) {
-      return bookings.map((b) => ({
-        id: b.id,
-        bookingNumber: b.bookingNumber,
-        status: b.status,
-        scheduledDate: b.scheduledDate.toISOString(),
-        timeSlot: b.timeSlot,
-        customerNotes: b.customerNotes,
-        cancellationReason: b.cancellationReason,
-        cancelledBy: b.cancelledBy,
-        servicePrice: b.servicePrice,
-        platformFee: b.platformFee,
-        taxAmount: b.taxAmount,
-        totalAmount: b.totalAmount,
-        createdAt: b.createdAt.toISOString(),
-        customer: {
-          id: b.customer.id,
-          name: b.customer.profile?.name ?? "Customer",
-          phone: b.customer.phone,
-          email: b.customer.email,
-        },
-        provider: {
-          id: b.provider.id,
-          name: b.provider.user.profile?.name ?? "Provider",
-          phone: b.provider.user.phone,
-          rating: b.provider.averageRating,
-        },
-        service: {
-          id: b.service.id,
-          name: b.service.name,
-          categoryName: b.service.category.name,
-        },
-        address: {
-          streetAddress: b.address.streetAddress,
-          city: b.address.city,
-          postalCode: b.address.postalCode,
-        },
-        payment: b.payment
-          ? {
-              id: b.payment.id,
-              amount: b.payment.amount,
-              method: b.payment.method,
-              status: b.payment.status,
-              razorpayPaymentId: b.payment.razorpayPaymentId,
-              paidAt: b.payment.paidAt ? b.payment.paidAt.toISOString() : null,
-            }
-          : null,
-      }));
-    }
-  } catch (err) {
-    console.warn("DB getAdminBookings failed:", (err as Error).message);
-  }
-
   // Fallback bookings list
-  return [
+  const fallbackBookings: AdminBookingDetail[] = [
     {
       id: "bk_seed_001",
       bookingNumber: "BK-202610-8401",
@@ -837,6 +807,92 @@ export async function getAdminBookings(filters?: {
       },
     },
   ];
+
+  if (isMockMode) {
+    if (filters?.status) {
+      return fallbackBookings.filter((b) => b.status === filters.status);
+    }
+    return fallbackBookings;
+  }
+
+  try {
+    const bookings = await prisma.booking.findMany({
+      where: filters?.status ? { status: filters.status } : undefined,
+      take: filters?.limit || 50,
+      orderBy: { createdAt: "desc" },
+      include: {
+        customer: { include: { profile: true } },
+        provider: {
+          include: {
+            user: { include: { profile: true } },
+          },
+        },
+        service: {
+          include: { category: true },
+        },
+        address: true,
+        payment: true,
+      },
+    });
+
+    if (bookings.length > 0) {
+      return bookings.map((b) => ({
+        id: b.id,
+        bookingNumber: b.bookingNumber,
+        status: b.status,
+        scheduledDate: b.scheduledDate.toISOString(),
+        timeSlot: b.timeSlot,
+        customerNotes: b.customerNotes,
+        cancellationReason: b.cancellationReason,
+        cancelledBy: b.cancelledBy,
+        servicePrice: b.servicePrice,
+        platformFee: b.platformFee,
+        taxAmount: b.taxAmount,
+        totalAmount: b.totalAmount,
+        createdAt: b.createdAt.toISOString(),
+        customer: {
+          id: b.customer.id,
+          name: b.customer.profile?.name ?? "Customer",
+          phone: b.customer.phone,
+          email: b.customer.email,
+        },
+        provider: {
+          id: b.provider.id,
+          name: b.provider.user.profile?.name ?? "Provider",
+          phone: b.provider.user.phone,
+          rating: b.provider.averageRating,
+        },
+        service: {
+          id: b.service.id,
+          name: b.service.name,
+          categoryName: b.service.category.name,
+        },
+        address: {
+          streetAddress: b.address.streetAddress,
+          city: b.address.city,
+          postalCode: b.address.postalCode,
+        },
+        payment: b.payment
+          ? {
+              id: b.payment.id,
+              amount: b.payment.amount,
+              method: b.payment.method,
+              status: b.payment.status,
+              razorpayPaymentId: b.payment.razorpayPaymentId,
+              paidAt: b.payment.paidAt ? b.payment.paidAt.toISOString() : null,
+            }
+          : null,
+      }));
+    }
+  } catch (err) {
+    console.warn("DB getAdminBookings failed:", (err as Error).message);
+  }
+
+  if (filters?.status) {
+    return fallbackBookings.filter((b) => b.status === filters.status);
+  }
+
+  return fallbackBookings;
 }
 
 /**
@@ -848,6 +904,10 @@ export async function resolveBookingDispute(params: {
   notes: string;
 }): Promise<{ success: boolean; error?: string }> {
   const { bookingId, action, notes } = params;
+
+  if (isMockMode) {
+    return { success: true };
+  }
 
   try {
     const booking = await prisma.booking.findUnique({
@@ -905,6 +965,46 @@ export async function resolveBookingDispute(params: {
  * Get all registered users for Admin directory
  */
 export async function getAdminUsers(): Promise<AdminUserItem[]> {
+  const fallbackUsers: AdminUserItem[] = [
+    {
+      id: "u_admin",
+      phone: "+919999900000",
+      email: "admin@locconnect.in",
+      role: UserRole.ADMIN,
+      name: "LocConnect Super Admin",
+      avatarUrl: null,
+      createdAt: new Date(Date.now() - 90 * 86400 * 1000).toISOString(),
+      bookingsCount: 0,
+      totalSpentOrEarned: 0,
+    },
+    {
+      id: "u_p1",
+      phone: "+919810111222",
+      email: "ramesh.plumber@example.com",
+      role: UserRole.PROVIDER,
+      name: "Ramesh Verma (Plumber)",
+      avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
+      createdAt: new Date(Date.now() - 60 * 86400 * 1000).toISOString(),
+      bookingsCount: 4,
+      totalSpentOrEarned: 889,
+    },
+    {
+      id: "u_rohit",
+      phone: "+919811122233",
+      email: "rohit.customer@example.com",
+      role: UserRole.CUSTOMER,
+      name: "Rohit Mehta",
+      avatarUrl: null,
+      createdAt: new Date(Date.now() - 40 * 86400 * 1000).toISOString(),
+      bookingsCount: 3,
+      totalSpentOrEarned: 1225,
+    },
+  ];
+
+  if (isMockMode) {
+    return fallbackUsers;
+  }
+
   try {
     const users = await prisma.user.findMany({
       include: {
@@ -943,42 +1043,7 @@ export async function getAdminUsers(): Promise<AdminUserItem[]> {
     console.warn("DB getAdminUsers failed:", (err as Error).message);
   }
 
-  // Fallback users
-  return [
-    {
-      id: "u_admin",
-      phone: "+919999900000",
-      email: "admin@locconnect.in",
-      role: UserRole.ADMIN,
-      name: "LocConnect Super Admin",
-      avatarUrl: null,
-      createdAt: new Date(Date.now() - 90 * 86400 * 1000).toISOString(),
-      bookingsCount: 0,
-      totalSpentOrEarned: 0,
-    },
-    {
-      id: "u_p1",
-      phone: "+919810111222",
-      email: "ramesh.plumber@example.com",
-      role: UserRole.PROVIDER,
-      name: "Ramesh Verma (Plumber)",
-      avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80",
-      createdAt: new Date(Date.now() - 60 * 86400 * 1000).toISOString(),
-      bookingsCount: 4,
-      totalSpentOrEarned: 889,
-    },
-    {
-      id: "u_rohit",
-      phone: "+919811122233",
-      email: "rohit.customer@example.com",
-      role: UserRole.CUSTOMER,
-      name: "Rohit Mehta",
-      avatarUrl: null,
-      createdAt: new Date(Date.now() - 40 * 86400 * 1000).toISOString(),
-      bookingsCount: 3,
-      totalSpentOrEarned: 1225,
-    },
-  ];
+  return fallbackUsers;
 }
 
 /**

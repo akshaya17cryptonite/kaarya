@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma, isMockMode } from "@/lib/prisma";
 import { NotificationType } from "@prisma/client";
 
 export * from "@/types";
@@ -48,6 +48,23 @@ export async function submitBookingReview(
 
   if (rating < 1 || rating > 5) {
     return { success: false, error: "Rating must be an integer between 1 and 5." };
+  }
+
+  if (isMockMode) {
+    return {
+      success: true,
+      review: {
+        id: `rev_${Date.now()}`,
+        bookingId,
+        customerId,
+        providerId: "p1",
+        rating,
+        comment: comment || "Excellent prompt service! Highly recommend.",
+        providerReply: null,
+        createdAt: new Date().toISOString(),
+        customerName: "Verified Customer",
+      },
+    };
   }
 
   try {
@@ -154,6 +171,20 @@ export async function submitBookingReview(
 export async function getReviewForBooking(
   bookingId: string
 ): Promise<ReviewDetail | null> {
+  if (isMockMode) {
+    return {
+      id: "rev_mock_001",
+      bookingId,
+      customerId: "u_rohit",
+      providerId: "p1",
+      rating: 5,
+      comment: "Ramesh arrived right on time and fixed our kitchen sink pipe leak within 30 minutes.",
+      providerReply: "Thank you for the kind review! Always glad to help.",
+      createdAt: new Date().toISOString(),
+      customerName: "Rohit Mehta",
+    };
+  }
+
   try {
     const review = await prisma.review.findUnique({
       where: { bookingId },

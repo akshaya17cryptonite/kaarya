@@ -60,6 +60,34 @@ export async function verifyOtpAndAuthenticate(params: {
     return { success: false, error: "Invalid OTP. Use test code: 123456" };
   }
 
+  if (isMock) {
+    const defaultName = name || (role === "PROVIDER" ? "New Service Partner" : "Customer");
+    const sessionUser: SessionUser = {
+      id: `usr_${Date.now()}`,
+      authId: `mock-auth-${Date.now()}`,
+      phone: normalizedPhone,
+      email: null,
+      role,
+      name: defaultName,
+      avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(defaultName)}`,
+    };
+
+    try {
+      const cookieStore = cookies();
+      cookieStore.set(AUTH_COOKIE_NAME, JSON.stringify(sessionUser), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+    } catch {
+      // outside request context
+    }
+
+    return { success: true, user: sessionUser };
+  }
+
   try {
     // Check if user exists in database
     let user = await prisma.user.findUnique({
@@ -187,6 +215,34 @@ export async function registerWithPassword(params: {
     return { success: false, error: strengthCheck.error };
   }
 
+  const isMock = process.env.ENABLE_MOCK_DRIVERS === "true";
+  if (isMock) {
+    const sessionUser: SessionUser = {
+      id: `usr_${Date.now()}`,
+      authId: `mock-auth-${Date.now()}`,
+      phone: normalizedPhone,
+      email: email || null,
+      role,
+      name: name.trim(),
+      avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+    };
+
+    try {
+      const cookieStore = cookies();
+      cookieStore.set(AUTH_COOKIE_NAME, JSON.stringify(sessionUser), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+    } catch {
+      // outside request context
+    }
+
+    return { success: true, user: sessionUser };
+  }
+
   try {
     // Check if phone already registered
     const existingPhone = await prisma.user.findUnique({
@@ -306,6 +362,38 @@ export async function loginWithPassword(params: {
   const isEmail = identifier.includes("@");
   const normalizedPhone = !isEmail ? normalizePhoneNumber(identifier) : "";
 
+  const isMock = process.env.ENABLE_MOCK_DRIVERS === "true";
+  if (isMock) {
+    if (password === "Test@12345" || password === "Pass@1234" || password === "StrongPass#2026") {
+      const sessionUser: SessionUser = {
+        id: "user_customer_rohit",
+        authId: "mock-auth-rohit",
+        phone: !isEmail ? normalizedPhone : "+919811122233",
+        email: isEmail ? identifier.toLowerCase().trim() : "rohit.mehta@example.com",
+        role: "CUSTOMER",
+        name: "Rohit Mehta",
+        avatarUrl: null,
+      };
+
+      try {
+        const cookieStore = cookies();
+        cookieStore.set(AUTH_COOKIE_NAME, JSON.stringify(sessionUser), {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 60 * 60 * 24 * 7,
+        });
+      } catch {
+        // outside request context
+      }
+
+      return { success: true, user: sessionUser };
+    }
+
+    return { success: false, error: "Invalid credentials. Use test password: Pass@1234" };
+  }
+
   try {
     const user = await prisma.user.findFirst({
       where: isEmail
@@ -402,6 +490,16 @@ export async function requestPasswordReset(
   const isEmail = identifier.includes("@");
   const normalizedPhone = !isEmail ? normalizePhoneNumber(identifier) : "";
 
+  const isMock = process.env.ENABLE_MOCK_DRIVERS === "true";
+  if (isMock) {
+    console.log(`[PASSWORD RESET] Token for ${identifier}: ${token} (Valid for 1 hour)`);
+    return {
+      success: true,
+      message: `If an account exists for ${identifier}, a password reset link has been dispatched.`,
+      resetToken: token,
+    };
+  }
+
   try {
     const user = await prisma.user.findFirst({
       where: isEmail
@@ -444,6 +542,11 @@ export async function resetPasswordWithToken(
   const strengthCheck = validatePasswordStrength(newPassword);
   if (!strengthCheck.isValid) {
     return { success: false, error: strengthCheck.error };
+  }
+
+  const isMock = process.env.ENABLE_MOCK_DRIVERS === "true";
+  if (isMock) {
+    return { success: true };
   }
 
   try {

@@ -1,4 +1,4 @@
-import { prisma, findNearbyProviders, type NearbyProviderResult } from "@/lib/prisma";
+import { prisma, findNearbyProviders, isMockMode, type NearbyProviderResult } from "@/lib/prisma";
 import { siteConfig } from "@/config/site";
 import { BookingStatus, KycDocumentType, PayoutStatus, ProviderVerificationStatus } from "@prisma/client";
 
@@ -484,6 +484,10 @@ function getFallbackDashboardData(userId: string): ProviderDashboardData {
  * Get comprehensive provider dashboard data by userId
  */
 export async function getProviderProfileByUserId(userId: string): Promise<ProviderDashboardData> {
+  if (isMockMode) {
+    return getFallbackDashboardData(userId);
+  }
+
   try {
     const provider = await prisma.provider.findFirst({
       where: { userId },
@@ -695,6 +699,17 @@ export async function updateJobStatus(params: {
 }): Promise<{ success: boolean; error?: string; booking?: unknown }> {
   const { bookingId, providerUserId, newStatus, reason } = params;
 
+  if (isMockMode) {
+    return {
+      success: true,
+      booking: {
+        id: bookingId,
+        status: newStatus,
+        cancellationReason: reason,
+      },
+    };
+  }
+
   try {
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
@@ -806,6 +821,10 @@ export async function saveAvailabilitySlots(params: {
   providerUserId: string;
   slots: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
 }): Promise<{ success: boolean; error?: string }> {
+  if (isMockMode) {
+    return { success: true };
+  }
+
   const { providerUserId, slots } = params;
 
   try {
@@ -847,6 +866,10 @@ export async function updateProviderServices(params: {
   providerUserId: string;
   services: Array<{ serviceId: string; customPrice?: number | null; isAvailable?: boolean }>;
 }): Promise<{ success: boolean; error?: string }> {
+  if (isMockMode) {
+    return { success: true };
+  }
+
   const { providerUserId, services } = params;
 
   try {
@@ -893,6 +916,10 @@ export async function saveOnboardingDetails(params: {
   providerUserId: string;
   input: OnboardingInput;
 }): Promise<{ success: boolean; error?: string }> {
+  if (isMockMode) {
+    return { success: true };
+  }
+
   const { providerUserId, input } = params;
 
   try {
@@ -997,6 +1024,10 @@ export async function replyToReview(params: {
   providerUserId: string;
   replyText: string;
 }): Promise<{ success: boolean; error?: string }> {
+  if (isMockMode) {
+    return { success: true };
+  }
+
   const { reviewId, providerUserId, replyText } = params;
 
   try {
@@ -1030,6 +1061,10 @@ export async function toggleProviderAvailability(params: {
   providerUserId: string;
   isAvailable: boolean;
 }): Promise<{ success: boolean; error?: string }> {
+  if (isMockMode) {
+    return { success: true };
+  }
+
   const { providerUserId, isAvailable } = params;
 
   try {
@@ -1063,30 +1098,6 @@ export async function getFilteredProviders(params: {
     minRating = 0,
     sortBy = "distance",
   } = params;
-
-  const applySort = (list: NearbyProviderResult[]) => {
-    return [...list].sort((a, b) => {
-      if (sortBy === "rating") return b.averageRating - a.averageRating;
-      if (sortBy === "experience") return b.experienceYears - a.experienceYears;
-      return a.distanceKm - b.distanceKm;
-    });
-  };
-
-  try {
-    const nearby = await findNearbyProviders({
-      latitude,
-      longitude,
-      radiusKm,
-      categorySlug,
-    });
-
-    if (nearby.length > 0) {
-      const filtered = nearby.filter((p) => p.averageRating >= minRating);
-      return applySort(filtered);
-    }
-  } catch (error) {
-    console.warn("Error finding nearby providers:", (error as Error).message);
-  }
 
   // Fallback providers in Noida
   const fallbackList: NearbyProviderResult[] = [
@@ -1144,6 +1155,36 @@ export async function getFilteredProviders(params: {
     },
   ];
 
+  const applySort = (list: NearbyProviderResult[]) => {
+    return [...list].sort((a, b) => {
+      if (sortBy === "rating") return b.averageRating - a.averageRating;
+      if (sortBy === "experience") return b.experienceYears - a.experienceYears;
+      return a.distanceKm - b.distanceKm;
+    });
+  };
+
+  if (isMockMode) {
+    return applySort(
+      fallbackList.filter((p) => p.distanceKm <= radiusKm && p.averageRating >= minRating)
+    );
+  }
+
+  try {
+    const nearby = await findNearbyProviders({
+      latitude,
+      longitude,
+      radiusKm,
+      categorySlug,
+    });
+
+    if (nearby.length > 0) {
+      const filtered = nearby.filter((p) => p.averageRating >= minRating);
+      return applySort(filtered);
+    }
+  } catch (error) {
+    console.warn("Error finding nearby providers:", (error as Error).message);
+  }
+
   return applySort(
     fallbackList.filter((p) => p.distanceKm <= radiusKm && p.averageRating >= minRating)
   );
@@ -1153,80 +1194,7 @@ export async function getFilteredProviders(params: {
  * Get detailed provider profile by providerId
  */
 export async function getProviderById(providerId: string): Promise<ProviderDetail | null> {
-  try {
-    const p = await prisma.provider.findUnique({
-      where: { id: providerId },
-      include: {
-        user: { include: { profile: true } },
-        services: {
-          include: {
-            service: { include: { category: true } },
-          },
-        },
-        availabilitySlots: {
-          orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
-        },
-        reviews: {
-          include: {
-            customer: { include: { profile: true } },
-          },
-          orderBy: { createdAt: "desc" },
-          take: 10,
-        },
-      },
-    });
-
-    if (p) {
-      return {
-        id: p.id,
-        userId: p.userId,
-        name: p.user.profile?.name ?? "Provider",
-        avatarUrl: p.user.profile?.avatarUrl ?? null,
-        bio: p.user.profile?.bio ?? null,
-        phone: p.user.phone,
-        experienceYears: p.experienceYears,
-        averageRating: p.averageRating,
-        totalReviews: p.totalReviews,
-        totalCompletedJobs: p.totalCompletedJobs,
-        serviceRadiusKm: p.serviceRadiusKm,
-        currentAddress: p.currentAddress,
-        latitude: p.latitude,
-        longitude: p.longitude,
-        isAvailable: p.isAvailable,
-        services: p.services.map((ps) => ({
-          id: ps.id,
-          serviceId: ps.serviceId,
-          name: ps.service.name,
-          slug: ps.service.slug,
-          basePrice: ps.service.basePrice,
-          customPrice: ps.customPrice,
-          estimatedDurationMinutes: ps.service.estimatedDurationMinutes,
-          categoryName: ps.service.category.name,
-          categorySlug: ps.service.category.slug,
-        })),
-        availabilitySlots: p.availabilitySlots.map((s) => ({
-          id: s.id,
-          dayOfWeek: s.dayOfWeek,
-          startTime: s.startTime,
-          endTime: s.endTime,
-          isBooked: s.isBooked,
-        })),
-        reviews: p.reviews.map((r) => ({
-          id: r.id,
-          rating: r.rating,
-          comment: r.comment,
-          providerReply: r.providerReply,
-          createdAt: r.createdAt.toISOString(),
-          customerName: r.customer.profile?.name ?? "Verified Customer",
-        })),
-      };
-    }
-  } catch (err) {
-    console.warn("DB provider detail lookup failed:", (err as Error).message);
-  }
-
-  // Fallback detail
-  return {
+  const fallbackDetail: ProviderDetail = {
     id: providerId,
     userId: "u_ramesh",
     name: "Ramesh Verma",
@@ -1299,4 +1267,82 @@ export async function getProviderById(providerId: string): Promise<ProviderDetai
       },
     ],
   };
+
+  if (isMockMode) {
+    return fallbackDetail;
+  }
+
+  try {
+    const p = await prisma.provider.findUnique({
+      where: { id: providerId },
+      include: {
+        user: { include: { profile: true } },
+        services: {
+          include: {
+            service: { include: { category: true } },
+          },
+        },
+        availabilitySlots: {
+          orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+        },
+        reviews: {
+          include: {
+            customer: { include: { profile: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        },
+      },
+    });
+
+    if (p) {
+      return {
+        id: p.id,
+        userId: p.userId,
+        name: p.user.profile?.name ?? "Provider",
+        avatarUrl: p.user.profile?.avatarUrl ?? null,
+        bio: p.user.profile?.bio ?? null,
+        phone: p.user.phone,
+        experienceYears: p.experienceYears,
+        averageRating: p.averageRating,
+        totalReviews: p.totalReviews,
+        totalCompletedJobs: p.totalCompletedJobs,
+        serviceRadiusKm: p.serviceRadiusKm,
+        currentAddress: p.currentAddress,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        isAvailable: p.isAvailable,
+        services: p.services.map((ps) => ({
+          id: ps.id,
+          serviceId: ps.serviceId,
+          name: ps.service.name,
+          slug: ps.service.slug,
+          basePrice: ps.service.basePrice,
+          customPrice: ps.customPrice,
+          estimatedDurationMinutes: ps.service.estimatedDurationMinutes,
+          categoryName: ps.service.category.name,
+          categorySlug: ps.service.category.slug,
+        })),
+        availabilitySlots: p.availabilitySlots.map((s) => ({
+          id: s.id,
+          dayOfWeek: s.dayOfWeek,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          isBooked: s.isBooked,
+        })),
+        reviews: p.reviews.map((r) => ({
+          id: r.id,
+          rating: r.rating,
+          comment: r.comment,
+          providerReply: r.providerReply,
+          createdAt: r.createdAt.toISOString(),
+          customerName: r.customer.profile?.name ?? "Verified Customer",
+        })),
+      };
+    }
+  } catch (err) {
+    console.warn("DB provider detail lookup failed:", (err as Error).message);
+  }
+
+  return fallbackDetail;
 }

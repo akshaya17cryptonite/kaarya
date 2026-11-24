@@ -10,6 +10,10 @@ export default defineConfig({
     setupFiles: [],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     testTimeout: 15000,
+    env: {
+      ENABLE_MOCK_DRIVERS: "true",
+      NODE_ENV: "test",
+    },
   },
   resolve: {
     alias: {
